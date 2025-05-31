@@ -49,6 +49,94 @@ export default function MainFeature() {
   const [betAmount, setBetAmount] = useState(0)
   const [showCards, setShowCards] = useState(false)
 
+const calculateHandStrength = (playerCards, communityCards) => {
+    if (!playerCards || playerCards.length < 2) return 0
+    
+    const allCards = [...playerCards, ...communityCards]
+    if (allCards.length < 2) return 0
+    
+    // Convert cards to numerical values for easier comparison
+    const getCardValue = (rank) => {
+      if (rank === 'A') return 14
+      if (rank === 'K') return 13
+      if (rank === 'Q') return 12
+      if (rank === 'J') return 11
+      return parseInt(rank)
+    }
+    
+    const cardValues = allCards.map(card => ({
+      value: getCardValue(card.rank),
+      suit: card.suit,
+      rank: card.rank
+    })).sort((a, b) => b.value - a.value)
+    
+    // Check for different hand types
+    const suits = {}
+    const values = {}
+    
+    cardValues.forEach(card => {
+      suits[card.suit] = (suits[card.suit] || 0) + 1
+      values[card.value] = (values[card.value] || 0) + 1
+    })
+    
+    const suitCounts = Object.values(suits)
+    const valueCounts = Object.values(values).sort((a, b) => b - a)
+    const uniqueValues = Object.keys(values).map(Number).sort((a, b) => b - a)
+    
+    // Check for flush
+    const hasFlush = suitCounts.some(count => count >= 5)
+    
+    // Check for straight
+    let hasStraight = false
+    if (uniqueValues.length >= 5) {
+      for (let i = 0; i <= uniqueValues.length - 5; i++) {
+        if (uniqueValues[i] - uniqueValues[i + 4] === 4) {
+          hasStraight = true
+          break
+        }
+      }
+      // Check for A-2-3-4-5 straight (wheel)
+      if (!hasStraight && uniqueValues.includes(14) && uniqueValues.includes(5) && 
+          uniqueValues.includes(4) && uniqueValues.includes(3) && uniqueValues.includes(2)) {
+        hasStraight = true
+      }
+    }
+    
+    // Determine hand strength
+    if (hasFlush && hasStraight) return 95 // Straight flush
+    if (valueCounts[0] === 4) return 90 // Four of a kind
+    if (valueCounts[0] === 3 && valueCounts[1] === 2) return 85 // Full house
+    if (hasFlush) return 75 // Flush
+    if (hasStraight) return 70 // Straight
+    if (valueCounts[0] === 3) return 65 // Three of a kind
+    if (valueCounts[0] === 2 && valueCounts[1] === 2) return 55 // Two pair
+    if (valueCounts[0] === 2) return 45 // One pair
+    
+    // High card strength based on highest cards
+    const highCardStrength = Math.min(40, (uniqueValues[0] - 2) * 3 + (uniqueValues[1] - 2))
+    return highCardStrength
+  }
+  
+  const getHandStrengthLabel = (strength) => {
+    if (strength >= 90) return 'Excellent'
+    if (strength >= 75) return 'Very Strong'
+    if (strength >= 65) return 'Strong'
+    if (strength >= 55) return 'Good'
+    if (strength >= 45) return 'Fair'
+    if (strength >= 30) return 'Weak'
+    return 'Very Weak'
+  }
+  
+  const getHandStrengthPercentage = (strength) => {
+    return Math.min(99, Math.max(1, Math.round(strength)))
+  }
+  
+  const getHandStrengthColor = (strength) => {
+    if (strength >= 70) return 'text-green-400'
+    if (strength >= 50) return 'text-yellow-400'
+    return 'text-red-400'
+  }
+
   const dealCards = () => {
     const newDeck = [...deck]
     const updatedPlayers = players.map(player => {
@@ -289,17 +377,47 @@ export default function MainFeature() {
                   )}
                 </div>
 
-                {/* Player Cards */}
+{/* Player Cards */}
                 {player.cards.length > 0 && (
-                  <div className="flex space-x-1 mt-2">
-                    {player.cards.map((card, cardIndex) => (
-                      <Card
-                        key={cardIndex}
-                        card={card}
-                        isHidden={index !== 0 || !showCards}
-                        className={player.hasFolded ? 'opacity-50' : ''}
-                      />
-                    ))}
+                  <div className="space-y-2 mt-2">
+                    <div className="flex space-x-1">
+                      {player.cards.map((card, cardIndex) => (
+                        <Card
+                          key={cardIndex}
+                          card={card}
+                          isHidden={index !== 0 || !showCards}
+                          className={player.hasFolded ? 'opacity-50' : ''}
+                        />
+                      ))}
+                    </div>
+                    
+                    {/* Hand Strength Indicator */}
+                    {!player.hasFolded && (index === 0 || gamePhase === GAME_PHASES.SHOWDOWN) && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.5 }}
+                        className="bg-black bg-opacity-50 rounded-lg px-2 py-1 border border-surface-600"
+                      >
+                        {(() => {
+                          const strength = calculateHandStrength(player.cards, communityCards)
+                          const percentage = getHandStrengthPercentage(strength)
+                          const label = getHandStrengthLabel(strength)
+                          const colorClass = getHandStrengthColor(strength)
+                          
+                          return (
+                            <div className="text-center">
+                              <div className={`text-xs font-bold ${colorClass}`}>
+                                {percentage}%
+                              </div>
+                              <div className={`text-xs ${colorClass}`}>
+                                {label}
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </motion.div>
+                    )}
                   </div>
                 )}
               </motion.div>
